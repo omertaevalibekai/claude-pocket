@@ -197,3 +197,21 @@ def test_vercel_function_with_fake_redis(monkeypatch):
         assert "claude-pocket:board" in data
     finally:
         srv.shutdown()
+
+
+def test_widget_served_with_read_key(server):
+    base, _ = server
+    assert call(base + "/widget.js")[0] == 403
+    assert call(base + "/widget.js", "p" * 20)[0] == 403
+    req = urllib.request.Request(base + "/widget.js", headers={"X-Pocket-Key": "r" * 20})
+    with urllib.request.urlopen(req, timeout=5) as reply:
+        script = reply.read().decode("utf-8")
+    assert "Claude Pocket" in script and "__POCKET" not in script
+    assert f'const URL_BASE = "{base}";' in script and 'const READ_KEY = "' + "r" * 20 + '";' in script
+
+
+def test_installer_script(tmp_path, monkeypatch):
+    monkeypatch.setattr(pocket, "HOME", tmp_path)
+    text = pocket.widget_script("https://example.test", "install.js")
+    assert 'URL_BASE = "https://example.test"' in text and pocket.keys()["read"] in text
+    assert len(text.splitlines()) < 30 and "/widget.js" in text

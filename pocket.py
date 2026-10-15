@@ -1,7 +1,7 @@
 """Claude Pocket — set up this computer.
 
     python pocket.py setup [--url https://…]   keys, hook, Claude Code settings
-    python pocket.py widget [--copy]           Scriptable script with the read key
+    python pocket.py widget [--installer] [--copy]   Scriptable script (or a short installer) with the read key
     python pocket.py status                    is the server up, what it shows now
     python pocket.py uninstall                 remove the hook from Claude Code
 
@@ -124,8 +124,8 @@ def uninstall_hooks(path: Path = SETTINGS) -> bool:
 
 # ------------------------------------------------------------------ виджет
 
-def widget_script(url: str) -> str:
-    template = (ROOT / "widget" / "claude-widget.js").read_text(encoding="utf-8")
+def widget_script(url: str, name: str = "claude-widget.js") -> str:
+    template = (ROOT / "widget" / name).read_text(encoding="utf-8")
     return template.replace("__POCKET_URL__", url.rstrip("/")).replace("__POCKET_KEY__", keys()["read"])
 
 
@@ -163,10 +163,12 @@ def cmd_widget(args) -> int:
     if not url:
         print("Сначала python pocket.py setup --url …")
         return 2
-    out = HOME / "claude-widget.js"
+    # установщик — короткий: на телефоне он сам скачает виджет с сервера
+    name = "install.js" if args.installer else "claude-widget.js"
+    out = HOME / ("claude-widget-installer.js" if args.installer else "claude-widget.js")
     HOME.mkdir(parents=True, exist_ok=True)
-    out.write_text(widget_script(url), encoding="utf-8")
-    print(f"Скрипт для Scriptable: {out}")
+    out.write_text(widget_script(url, name), encoding="utf-8")
+    print(f"{'Установщик' if args.installer else 'Скрипт'} для Scriptable: {out}")
     if args.copy:
         print("Скопирован в буфер обмена." if copy_to_clipboard(out) else "В буфер скопировать не вышло.")
     return 0
@@ -210,6 +212,7 @@ def main(argv=None) -> int:
     p.add_argument("--url")
     p = sub.add_parser("widget")
     p.add_argument("--copy", action="store_true")
+    p.add_argument("--installer", action="store_true", help="короткий установщик вместо всего скрипта")
     sub.add_parser("status")
     sub.add_parser("uninstall")
     args = parser.parse_args(argv)

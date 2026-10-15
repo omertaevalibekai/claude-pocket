@@ -72,11 +72,14 @@ Vercel with Upstash Redis (free tiers are plenty), or any small Linux VM.
 3. **iPhone**
 
    ```
-   python pocket.py widget --copy
+   python pocket.py widget --installer --copy
    ```
 
-   Paste the script into a new Scriptable script, then add a Scriptable widget
-   and pick that script.
+   Paste the short installer into a new Scriptable script and run it once: it
+   downloads the widget from your server (`/widget.js`, read key required) and
+   saves it as the "Claude Code" script. Then add a Scriptable widget and pick
+   that script. Run the installer again to update the widget.
+   (`python pocket.py widget --copy` gives the whole script instead.)
 
 `python pocket.py status` shows what the server sees right now;
 `python pocket.py uninstall` removes the hook from Claude Code.
