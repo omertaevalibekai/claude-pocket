@@ -9,6 +9,10 @@
       "destination": "/api/pocket?route=state"
     },
     {
+      "source": "/widget.js",
+      "destination": "/api/pocket?route=widget.js"
+    },
+    {
       "source": "/health",
       "destination": "/api/pocket?route=health"
     }

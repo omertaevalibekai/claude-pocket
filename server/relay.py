@@ -4,6 +4,7 @@ function (api/pocket.py) with the board kept in Redis.
 
     POST /event  header X-Pocket-Key: <push key>  body: event from hook/pocket_hook.py
     GET  /state  header X-Pocket-Key: <read key>  -> {"state": {...}, "received": ts}
+    GET  /widget.js header X-Pocket-Key: <read key> -> the Scriptable widget, ready to run
     GET  /health                                   -> ok
 
 Standard library only (works on Python 3.9). Listens on 127.0.0.1; a reverse
@@ -22,6 +23,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_BODY = 16 * 1024
+WIDGET = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "widget", "claude-widget.js")
 STALE_S = 30 * 60          # a session silent this long is gone (terminal closed without SessionEnd)
 DONE_SHOWN_S = 15 * 60     # "just finished" stays on the widget this long
 MAX_SESSIONS = 40
@@ -199,14 +201,35 @@ def make_handler(board, push_key: str, read_key: str):
                     return "/" + part[6:]
             return path
 
+        def _widget(self) -> None:
+            """Скрипт виджета с адресом этого сервера и ключом чтения — для установщика на телефоне."""
+            try:
+                with open(WIDGET, encoding="utf-8") as f:
+                    template = f.read()
+            except OSError:
+                return self._reply(404, {"error": "widget not bundled"})
+            host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+            local = host.startswith(("127.", "localhost", "[::1]"))
+            proto = self.headers.get("X-Forwarded-Proto") or ("http" if local else "https")
+            script = template.replace("__POCKET_URL__", f"{proto}://{host}").replace("__POCKET_KEY__", read_key)
+            raw = script.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(raw)
+
         def do_GET(self):
             route = self._route()
             if route == "/health":
                 return self._reply(200, "ok")
-            if route != "/state":
+            if route not in ("/state", "/widget.js"):
                 return self._reply(404, {"error": "not found"})
             if not self._key_ok(read_key):
                 return self._reply(403, {"error": "forbidden"})
+            if route == "/widget.js":
+                return self._widget()
             current = get_board()
             return self._reply(200, {"state": current.state(), "received": current.received})
 
