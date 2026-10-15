@@ -1,5 +1,6 @@
 """Claude Pocket server: turns Claude Code hook events into the status the
-iPhone widget shows.
+iPhone widget shows. Runs as a plain service (main() below) or as a Vercel
+function (api/pocket.py) with the board kept in Redis.
 
     POST /event  header X-Pocket-Key: <push key>  body: event from hook/pocket_hook.py
     GET  /state  header X-Pocket-Key: <read key>  -> {"state": {...}, "received": ts}
@@ -27,23 +28,42 @@ MAX_SESSIONS = 40
 STATES = ("think", "wait", "ask", "done", "idle")
 
 
-class Board:
-    """Sessions and today's totals, updated by events."""
+class FileStore:
+    """Board kept in a JSON file (the plain service)."""
 
     def __init__(self, path: str) -> None:
         self.path = path
+
+    def load(self):
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
+    def save(self, data: dict) -> None:
+        tmp = self.path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
+
+
+class Board:
+    """Sessions and today's totals, updated by events."""
+
+    def __init__(self, store) -> None:
+        self.store = FileStore(store) if isinstance(store, str) else store
         self.lock = threading.Lock()
         self.sessions: dict = {}
         self.today = {"day": "", "sessions": [], "commits": 0, "hours": [0] * 24}
         self.received = 0.0
-        try:
-            with open(path, encoding="utf-8") as f:
-                saved = json.load(f)
-            self.sessions = saved.get("sessions") or {}
-            self.today = saved.get("today") or self.today
-            self.received = float(saved.get("received") or 0)
-        except (OSError, ValueError):
-            pass
+        saved = self.store.load() or {}
+        self.sessions = saved.get("sessions") or {}
+        self.today = saved.get("today") or self.today
+        self.received = float(saved.get("received") or 0)
 
     # -------------------------------------------------------------- события
     def apply(self, e: dict, now: float | None = None) -> None:
@@ -115,13 +135,7 @@ class Board:
 
     def _save(self, now: float) -> None:
         self.received = now
-        tmp = self.path + ".tmp"
-        try:
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump({"sessions": self.sessions, "today": self.today, "received": now}, f, ensure_ascii=False)
-            os.replace(tmp, self.path)
-        except OSError:
-            pass
+        self.store.save({"sessions": self.sessions, "today": self.today, "received": now})
 
     # -------------------------------------------------------------- для виджета
     def state(self, now: float | None = None) -> dict:
@@ -154,7 +168,10 @@ def valid_event(e) -> bool:
             and len(e["sid"]) <= 64 and isinstance(e.get("detail", ""), str))
 
 
-def make_handler(board: Board, push_key: str, read_key: str):
+def make_handler(board, push_key: str, read_key: str):
+    """board — a Board, or a function returning one per request (serverless: no shared memory)."""
+    get_board = board if callable(board) and not isinstance(board, Board) else (lambda: board)
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "pocket"
         sys_version = ""
@@ -175,17 +192,26 @@ def make_handler(board: Board, push_key: str, read_key: str):
             given = self.headers.get("X-Pocket-Key") or ""
             return bool(expected) and hmac.compare_digest(given.encode(), expected.encode())
 
+        def _route(self) -> str:
+            path, _, query = self.path.partition("?")
+            for part in query.split("&"):                 # Vercel rewrite: /api/pocket?route=state
+                if part.startswith("route="):
+                    return "/" + part[6:]
+            return path
+
         def do_GET(self):
-            if self.path == "/health":
+            route = self._route()
+            if route == "/health":
                 return self._reply(200, "ok")
-            if self.path != "/state":
+            if route != "/state":
                 return self._reply(404, {"error": "not found"})
             if not self._key_ok(read_key):
                 return self._reply(403, {"error": "forbidden"})
-            return self._reply(200, {"state": board.state(), "received": board.received})
+            current = get_board()
+            return self._reply(200, {"state": current.state(), "received": current.received})
 
         def do_POST(self):
-            if self.path != "/event":
+            if self._route() != "/event":
                 return self._reply(404, {"error": "not found"})
             if not self._key_ok(push_key):
                 return self._reply(403, {"error": "forbidden"})
@@ -198,7 +224,7 @@ def make_handler(board: Board, push_key: str, read_key: str):
                 return self._reply(400, {"error": "bad json"})
             if not valid_event(event):
                 return self._reply(400, {"error": "bad event"})
-            board.apply(event)
+            get_board().apply(event)
             return self._reply(200, {"ok": True})
 
     return Handler

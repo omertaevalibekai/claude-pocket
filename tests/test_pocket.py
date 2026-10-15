@@ -175,3 +175,25 @@ def test_widget_script_has_read_key_only(tmp_path, monkeypatch):
     k = pocket.keys()
     assert 'const URL_BASE = "https://example.test";' in script
     assert k["read"] in script and k["push"] not in script and "__POCKET" not in script
+
+
+def test_vercel_function_with_fake_redis(monkeypatch):
+    import importlib
+    monkeypatch.setenv("POCKET_PUSH_KEY", "p" * 20)
+    monkeypatch.setenv("POCKET_READ_KEY", "r" * 20)
+    api = importlib.import_module("api.pocket")
+    data = {}
+    monkeypatch.setattr(api.RedisStore, "_call", lambda self, *cmd: data.get(cmd[1]) if cmd[0] == "GET"
+                        else data.__setitem__(cmd[1], cmd[2]))
+    handler = api.relay.make_handler(lambda: api.relay.Board(api.RedisStore()), "p" * 20, "r" * 20)
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        assert call(base + "/api/pocket?route=event", "p" * 20, json.dumps(ev("UserPromptSubmit")).encode())[0] == 200
+        code, body = call(base + "/api/pocket?route=state", "r" * 20)
+        assert code == 200 and body["state"]["sessions"][0]["name"] == "shepot"
+        assert call(base + "/api/pocket?route=health") == (200, "ok")
+        assert "claude-pocket:board" in data
+    finally:
+        srv.shutdown()

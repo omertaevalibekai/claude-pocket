@@ -1,0 +1,27 @@
+{
+  "rewrites": [
+    {
+      "source": "/event",
+      "destination": "/api/pocket?route=event"
+    },
+    {
+      "source": "/state",
+      "destination": "/api/pocket?route=state"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/pocket?route=health"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ]
+}

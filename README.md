@@ -31,13 +31,13 @@ Two keys: the computer can only write, the phone can only read.
 
 ## Setup
 
-Requirements: Python 3.9+ on the computer and on a small Linux server with a
-public IP (an Oracle/AWS/GCP free VM is plenty).
+Requirements: Python 3.9+ on the computer, and somewhere to run the server:
+Vercel with Upstash Redis (free tiers are plenty), or any small Linux VM.
 
 1. **Computer**
 
    ```
-   python pocket.py setup --url https://<server-ip-with-dashes>.sslip.io
+   python pocket.py setup --url https://<your-project>.vercel.app
    ```
 
    Creates keys in `~/.claude-pocket`, copies the hook there and adds one
@@ -45,15 +45,29 @@ public IP (an Oracle/AWS/GCP free VM is plenty).
    written next to it; other hooks are left alone). Claude Code never waits
    for the hook, and if the server is down nothing breaks.
 
-2. **Server**: allow TCP 443 in the cloud firewall, then
+2. **Server**, one of:
 
-   ```
-   SSH_KEY=~/.ssh/your.key ./deploy/deploy.sh user@<server-ip>
-   ```
+   - **Vercel** (no ports, no certificates):
 
-   Installs `server/relay.py` as a systemd service on 127.0.0.1 and Caddy in
-   front of it with a free certificate for `<ip-with-dashes>.sslip.io`.
-   No package manager runs, so a 1 GB VM stays responsive.
+     ```
+     vercel link
+     vercel integration add upstash/upstash-kv
+     vercel env add POCKET_PUSH_KEY production    # value from ~/.claude-pocket/keys.json
+     vercel env add POCKET_READ_KEY production
+     vercel deploy --prod
+     ```
+
+     `api/pocket.py` runs the same `server/relay.py`, keeping the board in Redis.
+
+   - **A Linux VM**: allow TCP 443 in the cloud firewall, then
+
+     ```
+     SSH_KEY=~/.ssh/your.key ./deploy/deploy.sh user@<server-ip>
+     ```
+
+     Installs `server/relay.py` as a systemd service on 127.0.0.1 and Caddy in
+     front of it with a free certificate for `<ip-with-dashes>.sslip.io`.
+     No package manager runs, so a 1 GB VM stays responsive.
 
 3. **iPhone**
 
