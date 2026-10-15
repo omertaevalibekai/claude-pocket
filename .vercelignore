@@ -1,0 +1,11 @@
+tests/
+deploy/
+widget/
+hook/
+/pocket.py
+README.md
+.pytest_cache/
+__pycache__/
+.agents/
+.claude/
+skills-lock.json

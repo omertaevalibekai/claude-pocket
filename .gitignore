@@ -3,3 +3,11 @@ __pycache__/
 *.pyc
 .env
 keys.json
+.vercel
+.env*.local
+
+.vercel
+.env*
+.agents/
+.claude/
+skills-lock.json
