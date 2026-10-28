@@ -11,3 +11,5 @@ keys.json
 .agents/
 .claude/
 skills-lock.json
+
+.venv/

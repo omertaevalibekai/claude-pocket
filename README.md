@@ -1,3 +1,5 @@
+[![CI](https://github.com/omertaevalibekai/claude-pocket/actions/workflows/ci.yml/badge.svg)](https://github.com/omertaevalibekai/claude-pocket/actions/workflows/ci.yml)
+
 # Claude Pocket
 
 An iPhone widget that shows what your Claude Code sessions are doing: who is
@@ -87,5 +89,10 @@ Vercel with Upstash Redis (free tiers are plenty), or any small Linux VM.
 ## Tests
 
 ```
+python -m pip install pytest
 python -m pytest tests
 ```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
